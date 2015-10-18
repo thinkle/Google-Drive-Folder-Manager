@@ -13,11 +13,12 @@ function getFolderString (f) {
 }
 
 function getFolderChildren (root) {  
-    childIterator = root.getFolders()
+  childIterator = root.getFolders()
   children = []
   while (childIterator.hasNext()) {
     child = childIterator.next()
     other_parent_iterator = child.getParents()
+    has_children = child.getFolders().hasNext() 
     other_parents = []
     while (other_parent_iterator.hasNext()) {
       op = other_parent_iterator.next();
@@ -25,7 +26,7 @@ function getFolderChildren (root) {
 	other_parents.push([op.getId(),op.getName(),op.getUrl()]);
       }
     }
-    children.push([child.getId(),child.getName(),child.getUrl(),other_parents]);
+    children.push([child.getId(),child.getName(),child.getUrl(),other_parents,has_children]);
   }
   return [root.getId(),children]
 }
@@ -43,9 +44,14 @@ function getRootFolder () {
   return getFolderChildren(root)
 }
 
-function getChildren (parent) {
-  return 
+function removeParent (child, parent) {
+  Logger.log('Got call to remove parent '+parent+' from child '+child);
+  parentFolder = DriveApp.getFolderById(parent);
+  childFolder = DriveApp.getFolderById(child);
+  parentFolder.removeFolder(childFolder);
+  return [child,parent,true]
 }
+
 
 function getMyFolders () {
   Logger.log('Calling getFolders')
