@@ -1,0 +1,86 @@
+<script src="https://code.jquery.com/jquery-1.11.2.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+  <script>
+function onOpenRoot (e) {
+  //alert('Testing on Open Root!')
+  google.script.run.withSuccessHandler(updateFolder).withFailureHandler(handleUpdateFailure).getRootFolder();
+  return true
+}
+
+function onOpenFolder (parent) {
+  google.script.run.withSuccessHandler(updateFolder).withFailureHandler(handleUpdateFailure).getFolder(parent);
+  return true
+}
+
+function handleUpdateFailure (e) {
+  console.log('handleUpdateFailure',e)
+}
+
+function updateFolder (parent_and_children) {
+  parent = parent_and_children[0]
+  children = parent_and_children[1]
+  console.log('updateFolder','parent:',parent,'children:',children);
+  ul = $('#id'+parent+'-children')[0]
+  if (ul) {
+    console.log('Found valid UL=>',ul,parent);
+  }
+  else {
+    // fallback to root
+    console.log('updateFolder assuming root')
+    ul = $('#root-children')[0];
+  }
+  for (var i=0; i<children.length; i++) {
+    child = children[i]
+    button = $('<button href="#" id="id'+child[0]+'-button" value="'+child[0]+'">Open</button>')[0]
+    //button.click(function (e) {onOpenFolder(child[0])}) //Broken
+    link = $('<a href="'+child[2]+'">'+child[1]+'</a>')[0]
+    embedded_ul = $('<ul id="id'+child[0]+'-children"><!-- placeholder --></ul>')[0]
+    li = $('<li id="id'+child[0]+'"></li>')[0]
+    li.appendChild(button);
+    li.appendChild(link);
+    li.appendChild(embedded_ul);
+    for (var ii=0; ii<child[3].length; ii++) { // Iterate through other parents...
+      op = child[3][ii];
+      tag_id = 'id'+child[0]+'-'+op[0]; // Combination of two IDs
+      tag = $('<span>&nbsp;<a class="otherParentTag" id='+tag_id+' href="'+op[2]+'">'+op[1]+'</a></span>')[0]
+      li.appendChild(tag)
+    }
+    ul.appendChild(li);
+  }
+}
+
+window.onload = function init() {
+  //alert('Loaded page!')
+  $("#openRoot").click(onOpenRoot)
+  //alert('Manipulated page!')
+  $('#foldertop').on('click','button', function () {
+    console.log('Clicked '+this.value);
+    if (this.value) {onOpenFolder(this.value)}
+  })
+}
+
+		  
+    </script>
+
+
+
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
+  <style>
+  .otherParentTag {border: 1px black solid; border-radius: 3px; background-color: #lightblue; padding: 3px; font-size: x-small}
+  </style>
+  </head>
+  <body>
+    <h1>Hello</h1>
+    <p>World</p>
+    <ul class="folders">
+      <li id="foldertop">Root <button id="openRoot" href="#">Open</button>
+	<ul id="root-children"></ul>
+      </li>
+    </ul>
+  </body>
+</html>
+
+
