@@ -31,21 +31,43 @@ function updateFolder (parent_and_children) {
   }
   for (var i=0; i<children.length; i++) {
     child = children[i]
-    button = $('<button href="#" id="id'+child[0]+'-button" value="'+child[0]+'">Open</button>')[0]
+    has_children = child[4]
     //button.click(function (e) {onOpenFolder(child[0])}) //Broken
     link = $('<a href="'+child[2]+'">'+child[1]+'</a>')[0]
     embedded_ul = $('<ul id="id'+child[0]+'-children"><!-- placeholder --></ul>')[0]
     li = $('<li id="id'+child[0]+'"></li>')[0]
-    li.appendChild(button);
+    if (has_children) {
+      button = $('<button class="expand" href="#" id="id'+child[0]+'-button" value="'+child[0]+'">+</button>')[0]
+      li.appendChild(button)
+    }
     li.appendChild(link);
-    li.appendChild(embedded_ul);
     for (var ii=0; ii<child[3].length; ii++) { // Iterate through other parents...
       op = child[3][ii];
       tag_id = 'id'+child[0]+'-'+op[0]; // Combination of two IDs
-      tag = $('<span>&nbsp;<a class="otherParentTag" id='+tag_id+' href="'+op[2]+'">'+op[1]+'</a></span>')[0]
+      tag = $('<span class="foldertag" id="tag-'+tag_id+'">&nbsp;</span>')[0];
+      tag.appendChild($('<a class="otherParentTag" id='+tag_id+' href="'+op[2]+'">'+op[1]+'</a>')[0])
+      tag.appendChild($('<button class="remove" value="'+op[0]+'/'+child[0]+'">Remove</button></span>')[0])
       li.appendChild(tag)
     }
+    li.appendChild(embedded_ul);				       
     ul.appendChild(li);
+  }
+}
+
+function onRemoveParent (child, parent) {
+  console.log('Calling onRemoveParent: ',child,'parent:',parent);
+  alert('About to remove item from folder - this is not undo-able. Please close this window if you did this by mistake.')
+  google.script.run.withSuccessHandler(updateRemovedParent).withFailureHandler(handleRemoveParentFailure).removeParent(child, parent);
+}
+
+function handleRemoveParentFailure (e) {
+  console.log('handleRemoveParentFailure',e)
+}
+
+function updateRemovedParent (val) {
+  child = val[0]; parent=val[1]; success=val[2];
+  if (success) {
+    $('#tag-id'+child+'-'+parent).hide();
   }
 }
 
@@ -53,10 +75,18 @@ window.onload = function init() {
   //alert('Loaded page!')
   $("#openRoot").click(onOpenRoot)
   //alert('Manipulated page!')
-  $('#foldertop').on('click','button', function () {
+  $('#foldertop').on('click','.expand', function () {
     console.log('Clicked '+this.value);
-    if (this.value) {onOpenFolder(this.value)}
-  })
+    if (this.value) {onOpenFolder(this.value)
+		    }
+  }) // end expand function
+  $('#foldertop').on('click','.remove', function(){
+    console.log('Clicked remove:'+this.value+this.value.split('/'));
+    parent = this.value.split('/')[0]; child = this.value.split('/')[1]
+    console.log('Remove '+child+' from '+parent);
+    onRemoveParent (child, parent)
+  }) // end remove function
+  
 }
 
 		  
@@ -69,14 +99,15 @@ window.onload = function init() {
     <base target="_top">
     <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
   <style>
-  .otherParentTag {border: 1px black solid; border-radius: 3px; background-color: #lightblue; padding: 3px; font-size: x-small}
+  .foldertag {border: 1px black solid; border-radius: 3px; background-color: #lightblue; padding: 3px; font-size: x-small}
+  .foldertag button {font-size: x-small}
   </style>
   </head>
   <body>
     <h1>Hello</h1>
     <p>World</p>
     <ul class="folders">
-      <li id="foldertop">Root <button id="openRoot" href="#">Open</button>
+      <li id="foldertop"><button id="openRoot" href="#">+</button> Root 
 	<ul id="root-children"></ul>
       </li>
     </ul>
