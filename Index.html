@@ -1,5 +1,7 @@
 <script src="https://code.jquery.com/jquery-1.11.2.min.js"></script>
-<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+  <script type="text/javascript" src="https://apis.google.com/js/api.js?onload=onApiLoad"></script> <!-- for picker API -->
+
   <script>
 function onOpenRoot (e) {
   //alert('Testing on Open Root!')
@@ -33,25 +35,34 @@ function updateFolder (parent_and_children) {
     child = children[i]
     has_children = child[4]
     //button.click(function (e) {onOpenFolder(child[0])}) //Broken
-    link = $('<a href="'+child[2]+'">'+child[1]+'</a>')[0]
+    link = $('<a target="_new" href="'+child[2]+'">'+child[1]+'</a>')[0]
+    checkbox = $('<input class="selected-file" type="checkbox" name="selected" value="'+child[0]+'">')[0]
     embedded_ul = $('<ul id="id'+child[0]+'-children"><!-- placeholder --></ul>')[0]
     li = $('<li id="id'+child[0]+'"></li>')[0]
+    li.appendChild(checkbox)
     if (has_children) {
       button = $('<button class="expand" href="#" id="id'+child[0]+'-button" value="'+child[0]+'">+</button>')[0]
       li.appendChild(button)
     }
     li.appendChild(link);
+    parentWrapper = $('<span class="parentWrapper"></span>')[0]
+    li.appendChild(parentWrapper)
     for (var ii=0; ii<child[3].length; ii++) { // Iterate through other parents...
       op = child[3][ii];
-      tag_id = 'id'+child[0]+'-'+op[0]; // Combination of two IDs
-      tag = $('<span class="foldertag" id="tag-'+tag_id+'">&nbsp;</span>')[0];
-      tag.appendChild($('<a class="otherParentTag" id='+tag_id+' href="'+op[2]+'">'+op[1]+'</a>')[0])
-      tag.appendChild($('<button class="remove" value="'+op[0]+'/'+child[0]+'">Remove</button></span>')[0])
-      li.appendChild(tag)
+      tag = makeParentTag(child[0],op[0],op[1],op[2]);
+      parentWrapper.appendChild(tag)
     }
     li.appendChild(embedded_ul);				       
     ul.appendChild(li);
   }
+}
+
+function makeParentTag (childId, parentId, parentName, parentUrl) {
+  tag_id = 'id'+childId+'-'+parentId; // Combination of two IDs
+  tag = $('<span class="foldertag" id="tag-'+tag_id+'">&nbsp;</span>')[0];
+  tag.appendChild($('<a class="otherParentTag" id='+tag_id+' target="_new" href="'+parentUrl+'">'+parentName+'</a>')[0])
+  tag.appendChild($('<button class="remove" value="'+parentId+'/'+childId+'">Remove</button></span>')[0])
+  return tag
 }
 
 function onRemoveParent (child, parent) {
@@ -60,8 +71,31 @@ function onRemoveParent (child, parent) {
   google.script.run.withSuccessHandler(updateRemovedParent).withFailureHandler(handleRemoveParentFailure).removeParent(child, parent);
 }
 
+function updateRoot () {
+  $('#root-children').empty();
+  onOpenRoot('wee!');
+}
+
+function onRemoveTreeParent () {
+  children = getSelectedDocs()
+  for (var i=0; i<children.length; i++) {
+    childId = children[0]
+    console.log('Trying to get parent of :','id'+childId);
+    parentId = $('#id'+childId).parent()[0].id.split('-')[0]
+    if (parentId=='root') {
+      console.log('Assuming root - removing parent');
+      google.script.run.withSuccessHandler(updateRoot).withFailureHandler(handleRemoveParentFailure).removeFromRoot(childId);}
+    else {
+      parentId = parentId.substring(2) // cut off "id"
+      console.log('Removing child id '+childId+'from parent id '+parentId);
+      google.script.run.withSuccessHandler(updateRemovedParent).withFailureHandler(handleRemoveParentFailure).removeParent(childId,parentId);
+    }
+  }
+}
+
 function handleRemoveParentFailure (e) {
   console.log('handleRemoveParentFailure',e)
+  showMessage('<h1>Error</h1><p>'+e+'</p>');
 }
 
 function updateRemovedParent (val) {
@@ -69,11 +103,183 @@ function updateRemovedParent (val) {
   if (success) {
     $('#tag-id'+child+'-'+parent).hide();
   }
+  // Now let's look for the parent tag...
+  parentElement = $('#id'+parent+'-children');
+  if ($('#id'+parent+'-children > li').length > 0) {
+    parentElement.empty()
+    onOpenFolder(parent)
+  }
+}
+    
+
+function addTagsToDogs (args) {
+  console.log('addTagsToDocs',args);
+  children = args[0];
+  newParent = args[1];
+  newParentId = newParent[0];
+  newParentName = newParent[1];
+  newParentUrl = newParent[2];
+  for (i=0; i<children.length; i++) {
+    child = children[i];
+    childId = child[0];
+    childName = child[1];
+    childUrl = child[2];
+    tag = makeParentTag(childId,newParentId,newParentName,newParentUrl);
+    console.log(tag,'insertBefore li#id'+childId+'>ul');
+    $('#id'+childId+' .parentWrapper')[0].appendChild(tag);
+  }
+  parentElement = $('#id'+newParentId+'-children')[0]
+  // If there is an element for the new parent, we'd best update it...
+  if ($('#id'+newParentId+'-children > li').length > 0) {
+    parentElement.empty();
+    onOpenFolder(newParentId);
+  }
 }
 
+
+function getSelectedDocs () {
+  selected_ids = []
+  elements = $(".selected-file:checked")
+  for (var i=0; i<elements.length; i++) {
+    e = elements[i]
+    selected_ids.push(e.value)
+  }
+  return selected_ids;
+}
+
+
+// PICKER stuff
+
+var DIALOG_DIMENSIONS = {
+  width: 600,
+  height: 425
+};
+var pickerApiLoaded = false;
+
+function onApiLoad() {
+  gapi.load('picker', {
+    'callback': function() {
+      pickerApiLoaded = true;
+    }
+  });
+  google.script.run.withSuccessHandler(createPicker)
+    .withFailureHandler(showMessage).getOAuthToken();
+}
+
+var msgCounter = 0
+
+function showMessage (msg) {
+  $('<div id="msg-'+msgCounter+'">'+msg+'</div>').dialog({
+    autoOpen: false }
+							)
+  $('#msg-'+msgCounter).dialog('open');
+  msgCounter += 1
+}
+
+function confirmationMessage (msg, yesAction) {
+  $('<div id="msg-'+msgCounter+'">'+msg+'</div>').dialog({
+    autoOpen: false,
+    dialogClass: "no-close",
+    buttons: [
+      {
+	text: "Yes",
+	click: function () {
+	  yesAction()
+	  $(this).dialog("close");
+	}
+      },
+      {
+	text: "No",
+	click: function() {
+        $( this ).dialog( "close" );
+	}
+      }],
+  }
+							)
+  $('#msg-'+msgCounter).dialog('open');
+  msgCounter += 1
+}
+
+function createPicker(token) {
+  //var mode = 2;
+  if (pickerApiLoaded && token) {
+    
+    var view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    view.setIncludeFolders(true);
+    // See end of thread here:
+    // https://groups.google.com/forum/#!topic/google-picker-api/onb8R9sv_vY
+    view.setSelectFolderEnabled(true);
+    //view.setOption('selectFolder', true);
+    
+    var picker = new google.picker.PickerBuilder()
+        .addView(view)
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        //.setSize(DIALOG_DIMENSIONS.width - 2, DIALOG_DIMENSIONS.height - 2)
+        //.setViewMode(google.picker.DocsViewMode.LIST)
+	.setOAuthToken(token)
+	.setSelectableMimeTypes('application/vnd.google-apps.folder')
+        .setCallback(pickerCallback)
+        .setOrigin(google.script.host.origin)
+        .build();
+    
+    picker.setVisible(true);
+    
+  } else {
+    showMessage('Unable to load the file picker.');
+  }
+}
+
+/**
+     * A callback function that extracts the chosen document's metadata from the
+     * response object. For details on the response object, see
+     * https://developers.google.com/picker/docs/result
+     *
+     * @param {object} data The response object.
+     */
+function pickerCallback(data) {
+  var action = data[google.picker.Response.ACTION];
+  if (action == google.picker.Action.PICKED) {
+    var doc = data[google.picker.Response.DOCUMENTS][0];
+    var id = doc[google.picker.Document.ID];
+    // Show the ID of the Google Drive folder
+    var selectedDocs = getSelectedDocs();
+    //conf = '<h3>You sure?</h3><p>We will be adding the ' +  selectedDocs.length + 'selected folders to folder: '+doc+'<p><p>'+selectedDocs+'</p>'
+    //showMessage(conf)
+    google.script.run.withSuccessHandler(addTagsToDogs).withFailureHandler(handleAddFailure).addMultipleToParent(selectedDocs,id);
+  } else if (action == google.picker.Action.CANCEL) {
+    google.script.host.close();
+  }
+}
+
+
+function handleAddFailure (error) {
+  console.log('handleAddFailure error',error);
+  showMessage('<h1>Error adding file</h1><p>'+JSON.stringify(error)+'</p>');
+}
+ 
+//MAIN
 window.onload = function init() {
   //alert('Loaded page!')
+  $("#removefromparent").click( 
+    function () {
+      selectedDocs = getSelectedDocs();
+      msg = '<h3>Remove from position in filetree</h3>'
+      msg += '<p>Are you sure you want to remove the '+selectedDocs.length+' folders '
+      msg += 'from their currently displayed positions?</p>'
+      msg += '<p><em>Note: this action will only work on folders in multiple locations.'
+      msg += 'This script will refuse to orphan files. If you are trying to trash files, please'
+      msg += 'use the standard google drive interface.</em></p>'
+      confirmationMessage(msg,onRemoveTreeParent)
+    }
+  )
+  $("#addtofolder").click(onApiLoad)
+  $("#addtoroot").click(function () {
+    var selectedDocs = getSelectedDocs();    
+    google.script.run.withSuccessHandler(updateRoot).withFailureHandler(handleAddFailure).addMultipleToRoot(selectedDocs);
+  }
+		       )
   $("#openRoot").click(onOpenRoot)
+
   //alert('Manipulated page!')
   $('#foldertop').on('click','.expand', function () {
     console.log('Clicked '+this.value);
@@ -86,10 +292,12 @@ window.onload = function init() {
     console.log('Remove '+child+' from '+parent);
     onRemoveParent (child, parent)
   }) // end remove function
-  
+  // Just open the root already...
+  onOpenRoot();
 }
 
-		  
+
+
     </script>
 
 
@@ -97,22 +305,50 @@ window.onload = function init() {
 <html>
   <head>
     <base target="_top">
-    <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
+  <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
+  <link href='https://fonts.googleapis.com/css?family=PT+Sans+Caption:400,700|Nixie+One|PT+Serif:400,700' rel='stylesheet' type='text/css'>
   <style>
+  body {font-family: "PT Serif"; max-width: 1000px; margin: auto;}
   a {text-decoration: none}
-  .foldertag {border: 1px black solid; border-radius: 3px; background-color: #lightblue; padding: 3px; font-size: x-small}
+h1 {font-family: "Nixie One"; color: #0033a0; font-size: 200%; margin-bottom: 0px;}
+  .foldertag {border: 1px white solid; border-radius: 3px; background-color: #ccf; padding: 3px; font-size: x-small; font-family: "PT Sans Caption"; font-weight: 700; color: #555;}
+  .foldertag button {margin: 3px}
   .foldertag button {font-size: x-small}
+#sub {font-weight: bold; font-family: "PT Sans Caption"; font-size: 125%; color: #888; margin-top: 0px; display: inline-block;}
+header {position: fixed; width: 1000px; top: 0px; background: -webkit-gradient(#cdf, eef, 120deg); background-color: #ddf; padding: 16px;}
+header p {margin: 0px;}
+header h1 {display: inline-block; padding-top: 0px; margin-top: 0px;}
+header #sub {display: inline-block}
+header #byline {display: inline-block}
+#byline {font-style: italic; color: #c6093b; text-align: right; font-size: x-small;}
+/* margin-top: 0px; font-size: x-small; position: relative; top: -100px; left: 600px; width: 386px;} */
+/* header nav {margin-top: -50px} */
+#byline a:hover {text-decoration:underline}
+ul {list-style-type: none; padding-left: 0px; margin-left: 0px;}
+ul ul {margin-left: 2em;}
+li:nth-child(even) {background: #DDD}
+li:nth-child(odd) {background: #FFF}
+
+#main {margin-top: 140px;}
   </style>
   </head>
   <body>
-    <h1>Folder manager</h1>
-  <p>A simple interface to manage multiple folder locations in google apps</p>
-  <p><em>(Putting back the interface google so graciously removed...)</em></p>
+  <header>
+  <h1>Folder manager</h1>
+  <p id="sub">A simple interface to manage folders in google drive.</p>
+  <p id="byline">brought to you by Tom Hinkle (c)2015, under a <a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html">GPL</a> license. <a href="https://github.com/thinkle/Google-Drive-Folder-Manager">see source code, submit patches, and report bugs at Github</a>.</p>
+  
+  <nav><button class="ui-widget" id="addtofolder">Add To Folder</button> <button class="ui-widget" id="addtoroot">Add to My Drive</button>
+    <button class="ui-widget" id="removefromparent">Remove from Parent</button> <!-- <input type="text" id="search"> <button class="ui-widget" id="searchButton">Search</button> -->
+  </nav>
+  </header>
+  <div id="main">
     <ul class="folders">
-      <li id="foldertop"><button id="openRoot" href="#">+</button> Root 
+      <li id="foldertop"><button id="openRoot">+</button> My Drive
 	<ul id="root-children"></ul>
       </li>
-    </ul>
+  </ul>
+  </div>
   </body>
 </html>
 
