@@ -51,15 +51,22 @@ function removeParent (child, parent) {
   // make sure we don't remove the last parent
   // we don't want to create any orphans
   var allParentsIterator = childFolder.getParents()
-  allParentsIterator.next() // First parent...
+  firstParent = allParentsIterator.next() // First parent...
   if (allParentsIterator.hasNext()) {
     // As long as there is a second parent, we are happy...
     parentFolder.removeFolder(childFolder);
     return [child,parent,true]
   }
   else {
-    Logger.log('Refusing to orphan '+child+' by removing parent '+parent)
-    throw "Refusing to Orphan "+childFolder.getName()+" by removing last parent, "+parentFolder.getName();
+		if (firstParent.getId()!=parentFolder.getId()) {
+			Logger.log('Strange: we are asked to remove from a non-parent')
+			Logger.log('Request to remove from: '+firstParent.getName()+' '+firstParent.getId())
+			Logger.log('Actual parent is: '+parentFolder.getName()+' '+parentFolder.getId())
+		}
+		else {
+			Logger.log('Refusing to orphan '+child+' by removing parent '+parent)
+			throw "Refusing to Orphan "+childFolder.getName()+" by removing last parent, "+parentFolder.getName();
+		}
   }
 }
 
