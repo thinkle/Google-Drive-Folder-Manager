@@ -1,21 +1,40 @@
 <script src="https://code.jquery.com/jquery-1.11.2.min.js"></script>
   <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
   <script type="text/javascript" src="https://apis.google.com/js/api.js?onload=onApiLoad"></script> <!-- for picker API -->
+  
 
   <script>
 function onOpenRoot (e) {
   //alert('Testing on Open Root!')
+  $('html').css('cursor','progress')
   google.script.run.withSuccessHandler(updateFolder).withFailureHandler(handleUpdateFailure).getRootFolder();
   return true
 }
 
+function onCloseFolder (parent) {
+  console.log('Closing ',parent);
+  $('#id'+parent+'-children').empty()
+  ul = $('#id'+parent+'-children')[0]
+  button = $('#id'+parent+'-button')[0]
+  button.class = 'expand'; button.innerHTML = '+';
+}
+
+function onCloseRoot () {
+  console.log('Closing root',this);
+  $('#root-children').empty();
+  $('#openRoot')[0].innerHTML = '+';
+  $('#openRoot')[0].class = 'expand';
+}
+
 function onOpenFolder (parent) {
+  $('html').css('cursor','progress')
   google.script.run.withSuccessHandler(updateFolder).withFailureHandler(handleUpdateFailure).getFolder(parent);
   return true
 }
 
 function handleUpdateFailure (e) {
   console.log('handleUpdateFailure',e)
+  $('html').css('cursor','default')
 }
 
 function updateFolder (parent_and_children) {
@@ -23,6 +42,7 @@ function updateFolder (parent_and_children) {
   children = parent_and_children[1]
   console.log('updateFolder','parent:',parent,'children:',children);
   ul = $('#id'+parent+'-children')[0]
+  button = $('#id'+parent+'-button')[0]
   if (ul) {
     console.log('Found valid UL=>',ul,parent);
   }
@@ -30,7 +50,10 @@ function updateFolder (parent_and_children) {
     // fallback to root
     console.log('updateFolder assuming root')
     ul = $('#root-children')[0];
+    button = $('#openRoot')[0]
   }
+  // Change button class...
+  button.class = 'expanded'; button.innerHTML = '-';
   for (var i=0; i<children.length; i++) {
     child = children[i]
     has_children = child[4]
@@ -55,11 +78,12 @@ function updateFolder (parent_and_children) {
     li.appendChild(embedded_ul);				       
     ul.appendChild(li);
   }
+  $('html').css('cursor','default')
 }
 
 function makeParentTag (childId, parentId, parentName, parentUrl) {
   tag_id = 'id'+childId+'-'+parentId; // Combination of two IDs
-  tag = $('<span class="foldertag" id="tag-'+tag_id+'">&nbsp;</span>')[0];
+  tag = $('<span class="foldertag secondary" id="tag-'+tag_id+'">&nbsp;</span>')[0];
   tag.appendChild($('<a class="otherParentTag" id='+tag_id+' target="_new" href="'+parentUrl+'">'+parentName+'</a>')[0])
   tag.appendChild($('<button class="remove" value="'+parentId+'/'+childId+'">Remove</button></span>')[0])
   return tag
@@ -68,16 +92,19 @@ function makeParentTag (childId, parentId, parentName, parentUrl) {
 function onRemoveParent (child, parent) {
   console.log('Calling onRemoveParent: ',child,'parent:',parent);
   alert('About to remove item from folder - this is not undo-able. Please close this window if you did this by mistake.')
+  $('html').css('cursor','progress')
   google.script.run.withSuccessHandler(updateRemovedParent).withFailureHandler(handleRemoveParentFailure).removeParent(child, parent);
 }
 
 function updateRoot () {
   $('#root-children').empty();
+  $('#root-children')[0].innerHTML = '';
   onOpenRoot('wee!');
 }
 
 function onRemoveTreeParent () {
   children = getSelectedDocs()
+  $('html').css('cursor','progress')
   for (var i=0; i<children.length; i++) {
     childId = children[0]
     console.log('Trying to get parent of :','id'+childId);
@@ -95,6 +122,7 @@ function onRemoveTreeParent () {
 
 function handleRemoveParentFailure (e) {
   console.log('handleRemoveParentFailure',e)
+  $('html').css('cursor','default')
   showMessage('<h1>Error</h1><p>'+e+'</p>');
 }
 
@@ -109,6 +137,7 @@ function updateRemovedParent (val) {
     parentElement.empty()
     onOpenFolder(parent)
   }
+  $('html').css('cursor','default')
 }
     
 
@@ -278,14 +307,29 @@ window.onload = function init() {
     google.script.run.withSuccessHandler(updateRoot).withFailureHandler(handleAddFailure).addMultipleToRoot(selectedDocs);
   }
 		       )
-  $("#openRoot").click(onOpenRoot)
+  
+  $("#openRoot").click(function () {
+    if (this.class == 'expanded') {
+      onCloseRoot();
+    }
+    else {
+      onOpenRoot();
+    }
+  })
+		      
 
   //alert('Manipulated page!')
   $('#foldertop').on('click','.expand', function () {
     console.log('Clicked '+this.value);
-    if (this.value) {onOpenFolder(this.value)
-		    }
-  }) // end expand function
+    if (this.value) {
+      if (this.class == 'expanded') {
+	onCloseFolder(this.value);
+      }
+      else {
+	onOpenFolder(this.value);
+      }
+    }}); // end expand function
+  
   $('#foldertop').on('click','.remove', function(){
     console.log('Clicked remove:'+this.value+this.value.split('/'));
     parent = this.value.split('/')[0]; child = this.value.split('/')[1]
@@ -304,23 +348,22 @@ window.onload = function init() {
 
 <html>
   <head>
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
     <base target="_top">
   <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
   <link href='https://fonts.googleapis.com/css?family=PT+Sans+Caption:400,700|Nixie+One|PT+Serif:400,700' rel='stylesheet' type='text/css'>
   <style>
-  body {font-family: "PT Serif"; max-width: 1000px; margin: auto;}
+  body {font-family: "Arial"; max-width: 1000px; margin: auto;}
   a {text-decoration: none}
 h1 {font-family: "Nixie One"; color: #0033a0; font-size: 200%; margin-bottom: 0px;}
-  .foldertag {border: 1px white solid; border-radius: 3px; background-color: #ccf; padding: 3px; font-size: x-small; font-family: "PT Sans Caption"; font-weight: 700; color: #555;}
-  .foldertag button {margin: 3px}
-  .foldertag button {font-size: x-small}
+  .foldertag {border: 1px white solid; border-radius: 3px; background-color: #ddf; padding: 3px; font-size: x-small; font-weight: 700;}
 #sub {font-weight: bold; font-family: "PT Sans Caption"; font-size: 125%; color: #888; margin-top: 0px; display: inline-block;}
 header {position: fixed; width: 1000px; top: 0px; background: -webkit-gradient(#cdf, eef, 120deg); background-color: #ddf; padding: 16px;}
 header p {margin: 0px;}
 header h1 {display: inline-block; padding-top: 0px; margin-top: 0px;}
 header #sub {display: inline-block}
 header #byline {display: inline-block}
-#byline {font-style: italic; color: #333; text-align: right; font-size: x-small;}
+#byline {font-family: "PT Serif"; font-style: italic; color: #333; text-align: right; font-size: x-small;}
 /* margin-top: 0px; font-size: x-small; position: relative; top: -100px; left: 600px; width: 386px;} */
 /* header nav {margin-top: -50px} */
 #byline a:hover {text-decoration:underline}
@@ -328,6 +371,17 @@ ul {list-style-type: none; padding-left: 0px; margin-left: 0px;}
 ul ul {margin-left: 2em;}
 li:nth-child(even) {background: #DDD}
 li:nth-child(odd) {background: #FFF}
+
+  .expand {padding-left: 0px; padding-right: 0px; height: 16px; font-size: 14px; min-width: 16px; line-height: 15px;}
+  .remove {padding: 2px;
+    height: 80%;
+    font-size: 70%;
+    min-width: 40px;
+    line-height: 100%;
+    margin-top: -10px;}
+  .foldertag a {color: #777; }
+  header {z-index: 1} /* Don't let google's positioning screw with our fixed header... */
+  
 
 #main {margin-top: 140px;}
   </style>
@@ -338,13 +392,13 @@ li:nth-child(odd) {background: #FFF}
   <p id="sub">A simple interface to manage folders in google drive.</p>
   <p id="byline">brought to you by Tom Hinkle (c)2015, under a <a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html">GPL</a> license. <a href="https://github.com/thinkle/Google-Drive-Folder-Manager">see source code, submit patches, and report bugs at Github</a>.</p>
   
-  <nav><button class="ui-widget" id="addtofolder">Add To Folder</button> <button class="ui-widget" id="addtoroot">Add to My Drive</button>
-    <button class="ui-widget" id="removefromparent">Remove from Parent</button> <!-- <input type="text" id="search"> <button class="ui-widget" id="searchButton">Search</button> -->
+  <nav><button class="action ui-widget-breakme" id="addtofolder">Add To Folder</button> <button class="action ui-widget-breakme" id="addtoroot">Add to My Drive</button>
+    <button class="action ui-widget-breakme" id="removefromparent">Remove from Parent</button> <!-- <input type="text" id="search"> <button class="ui-widget-breakme" id="searchButton">Search</button> -->
   </nav>
   </header>
   <div id="main">
     <ul class="folders">
-      <li id="foldertop"><button id="openRoot">+</button> My Drive
+      <li id="foldertop"><button class="expand" id="openRoot">+</button> My Drive
 	<ul id="root-children"></ul>
       </li>
   </ul>
